@@ -1,12 +1,15 @@
-name: .NET Core 
+name: CI - Process
 
 on:
-  workflow_dispatch:
-
+  push:
+    branches: 
+      - master
+      - FIN-**
 
 jobs:
   build:
 
+    name: Build & Push Packages
     runs-on: ubuntu-latest
 
     steps:
@@ -57,16 +60,49 @@ jobs:
     - name: Push OctoPetShop packages
       uses: OctopusDeploy/push-package-action@v1.1.1
       with:
-        api_key: ${{ secrets.OCTOPUSSERVERAPIKEY }}
-        server: ${{ secrets.OCTOPUSSERVERURL }}
+        api_key: ${{ secrets.OCTOPUS_API_KEY }}
+        server: ${{ secrets.OCTOPUS_URL }}
         packages: "artifacts/OctoPetShop.Database.${{ env.PACKAGE_VERSION }}.zip,artifacts/OctoPetShop.Web.${{ env.PACKAGE_VERSION }}.zip,artifacts/OctoPetShop.ProductService.${{ env.PACKAGE_VERSION }}.zip,artifacts/OctoPetShop.ShoppingCartService.${{ env.PACKAGE_VERSION }}.zip"
-        space: ${{ secrets.OCTOPUSSERVER_SPACE }}
-    - name: Create and deploy release
-      uses: OctopusDeploy/create-release-action@v1.1.1
-      with:
-        api_key: ${{ secrets.OCTOPUSSERVERAPIKEY }}
-        server: ${{ secrets.OCTOPUSSERVERURL }}
-        space: ${{ secrets.OCTOPUSSERVER_SPACE }}
-        project: "Octo Pet Shop"
-        deploy_to: "Development"
-        progress: true
+        space: ${{ secrets.OCTOPUS_SPACE }}
+
+  Push-build-information:
+       
+      name: 🐙Push Build Information
+      needs: build 
+      runs-on: ubuntu-latest
+      
+      env:
+        OCTOPUS_URL: ${{ secrets.OCTOPUS_URL }}
+        OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+        OCTOPUS_SPACE: ${{ secrets.OCTOPUS_SPACE }}      
+
+      steps:
+      - uses: OctopusDeploy/push-build-information-action@v3
+        name: Push Build Information
+        with:
+          version: "$(date +'%Y.%m.%d').$GITHUB_RUN_NUMBER"
+          packages: |
+            octopetshop-web
+            octopetshop-productservice
+            octopetshop-shoppingcartservice
+            octopetshop-database
+
+  Create-Octopus-Release:
+  
+      name: 🐙Create Release
+      needs: [build, Push-build-information]
+      runs-on: ubuntu-latest
+      
+      env:
+        OCTOPUS_URL: ${{ secrets.OCTOPUS_URL }}
+        OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+        OCTOPUS_SPACE: ${{ secrets.OCTOPUS_SPACE }}
+        
+      steps:
+      - uses: OctopusDeploy/create-release-action@v3
+        id: "create-release"
+        with:
+          project: "Customer Banking Portal"
+          git_ref: ${{ github.head_ref || github.ref_name }} 
+      outputs: 
+       release_number: ${{ steps.create-release.outputs.release_number }}
